@@ -154,7 +154,9 @@
 /* ============================ CONFIG ============================ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbx4GrGKC9nkDfsBzzhYkENJiCzlor1LALRYQR1AJ9d-DIuDADo1KsfTEqPmz0SCtE0/exec';
 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
-const EAR_OPEN = 0.24, EAR_SHUT = 0.18, LIVE_TIMEOUT = 9000;
+const LIVE_TIMEOUT = 12000;   // ms to wait for a blink
+const BLINK_DROP = 0.72;      // eyes count as "shut" below this fraction of your own open baseline
+const DET_OPTS = { inputSize: 320, scoreThreshold: 0.4 };  // detector tuning (inputSize must be a multiple of 32)
 
 /* ============================ STATE ============================ */
 let session=null, stream=null, modelsReady=false, boot={departments:[]}, lastAtt=[];
@@ -193,28 +195,64 @@ async function startCam(id){ try{ const v=document.getElementById(id); v.srcObje
 
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 function ear(eye){ const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y); return (d(eye[1],eye[5])+d(eye[2],eye[4]))/(2*d(eye[0],eye[3])); }
+function eyeEAR(r){ return (ear(r.landmarks.getLeftEye())+ear(r.landmarks.getRightEye()))/2; }
+function median(a){ const b=[...a].sort((x,y)=>x-y); return b[Math.floor(b.length/2)]; }
+function detOpts(){ return new faceapi.TinyFaceDetectorOptions(DET_OPTS); }
+async function waitForVideo(v){ let n=0; while((!v.videoWidth || v.readyState<2) && n++<40) await wait(100); }
+
+// Grab one clean face descriptor + snapshot (no liveness). Used by both flows.
+async function grabDescriptor(v, opts, promptId){
+  prompt(promptId,'Hold still…');
+  for(let i=0;i<12;i++){
+    const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks().withFaceDescriptor();
+    if(r && r.descriptor && r.descriptor.length===128){
+      const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+      c.getContext('2d').drawImage(v,0,0); prompt(promptId,'');
+      return { descriptor:Array.from(r.descriptor), photo:c.toDataURL('image/jpeg',0.7) };
+    }
+    await wait(80);
+  }
+  prompt(promptId,''); throw new Error('Could not read your face clearly — improve lighting and try again.');
+}
+
+// Registration: plain supervised capture, NO blink required.
+async function captureFace(videoId, promptId){
+  await ensureModels();
+  const v=document.getElementById(videoId); await waitForVideo(v);
+  if(!v.videoWidth) throw new Error('Camera not ready — wait a second and retry.');
+  prompt(promptId,'Look at the camera…');
+  return await grabDescriptor(v, detOpts(), promptId);
+}
+// Check-in: self-calibrating blink. Measures YOUR open-eye baseline, then looks for a relative drop.
 async function liveCapture(videoId, promptId){
   await ensureModels();
-  const v=document.getElementById(videoId), opts=new faceapi.TinyFaceDetectorOptions();
-  const start=Date.now(); let phase='open', blinked=false, sawFace=false;
-  prompt(promptId,'Blink once 👁️');
+  const v=document.getElementById(videoId); await waitForVideo(v);
+  if(!v.videoWidth) throw new Error('Camera not ready — wait a second and retry.');
+  const opts=detOpts();
+
+  // Phase 1 — calibrate open-eye baseline (~1s)
+  prompt(promptId,'Keep your eyes open…');
+  let samples=[], t0=Date.now();
+  while(Date.now()-t0<1000){
+    const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks();
+    if(r) samples.push(eyeEAR(r));
+    await wait(40);
+  }
+  if(samples.length<3) throw new Error('Face not clear — face the camera in good light and retry.');
+  const open=median(samples), shut=open*BLINK_DROP, reopen=open*0.9;
+
+  // Phase 2 — wait for a blink (drop below shut, then back above reopen)
+  prompt(promptId,'Now blink once 👁️');
+  let phase='open', blinked=false, start=Date.now();
   while(Date.now()-start<LIVE_TIMEOUT){
     const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks();
-    if(r){ sawFace=true; const e=(ear(r.landmarks.getLeftEye())+ear(r.landmarks.getRightEye()))/2;
-      if(phase==='open'&&e<EAR_SHUT) phase='closed'; else if(phase==='closed'&&e>EAR_OPEN){ blinked=true; break; } }
-    await wait(110);
+    if(r){ const e=eyeEAR(r);
+      if(phase==='open' && e<shut) phase='closed';
+      else if(phase==='closed' && e>reopen){ blinked=true; break; } }
+    await wait(30);
   }
-  if(!blinked){ prompt(promptId,''); throw new Error(sawFace?'No blink detected — please blink and retry.':'No face detected — move into frame.'); }
-  prompt(promptId,'Hold still…');
-  for(let i=0;i<8;i++){
-    const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks().withFaceDescriptor();
-    if(r){ const e=(ear(r.landmarks.getLeftEye())+ear(r.landmarks.getRightEye()))/2;
-      if(e>0.20){ const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
-        c.getContext('2d').drawImage(v,0,0); prompt(promptId,'');
-        return {descriptor:Array.from(r.descriptor), photo:c.toDataURL('image/jpeg',0.7)}; } }
-    await wait(90);
-  }
-  prompt(promptId,''); throw new Error('Could not capture a clear frame — try again.');
+  if(!blinked){ prompt(promptId,''); throw new Error('No blink detected — blink firmly once and hold still.'); }
+  return await grabDescriptor(v, opts, promptId);
 }
 
 /* ============================ UI helpers ============================ */
@@ -301,7 +339,7 @@ async function doRegister(){
   try{
     const name=document.getElementById('rgName').value.trim(), deptId=document.getElementById('rgDept').value;
     if(!name) throw new Error('Enter a name'); if(!deptId) throw new Error('Create a department first');
-    const cap=await liveCapture('camB','promptB');
+    const cap=await captureFace('camB','promptB');
     const r=await api('registerEmployee',{token:session.token, name, deptId, descriptor:cap.descriptor, photo:cap.photo});
     ring('ringB','ok'); st.className='status go'; st.innerHTML='<span class="dot"></span><span>Registered '+r.name+'.</span>';
     document.getElementById('rgName').value=''; renderEmployees();
