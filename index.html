@@ -154,9 +154,11 @@
 /* ============================ CONFIG ============================ */
 const API_URL = 'https://script.google.com/macros/s/AKfycbx4GrGKC9nkDfsBzzhYkENJiCzlor1LALRYQR1AJ9d-DIuDADo1KsfTEqPmz0SCtE0/exec';
 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
-const LIVE_TIMEOUT = 5000;   // ms to wait for a blink
-const BLINK_DROP = 0.90;      // eyes count as "shut" below this fraction of your own open baseline
-const DET_OPTS = { inputSize: 320, scoreThreshold: 0.4 };  // detector tuning (inputSize must be a multiple of 32)
+const LIVENESS = 'off';       // check-in liveness: 'off' (face only) | 'motion' (head turn) | 'blink'
+const MOTION_RANGE = 0.16;    // how far the head must turn for 'motion' mode (fraction of face width)
+const LIVE_TIMEOUT = 12000;   // ms to wait for the liveness action
+const BLINK_DROP = 0.72;      // 'blink' mode: eyes "shut" below this fraction of your open baseline
+const DET_OPTS = { inputSize: 320, scoreThreshold: 0.4 };  // detector tuning (inputSize multiple of 32)
 
 /* ============================ STATE ============================ */
 let session=null, stream=null, modelsReady=false, boot={departments:[]}, lastAtt=[];
@@ -249,9 +251,39 @@ async function liveCapture(videoId, promptId){
     if(r){ const e=eyeEAR(r);
       if(phase==='open' && e<shut) phase='closed';
       else if(phase==='closed' && e>reopen){ blinked=true; break; } }
-    await wait(30);
+    await wait(0);
   }
   if(!blinked){ prompt(promptId,''); throw new Error('No blink detected — blink firmly once and hold still.'); }
+  return await grabDescriptor(v, opts, promptId);
+}
+
+// Liveness dispatcher — controlled by LIVENESS at the top of this script.
+async function verifyLive(videoId, promptId){
+  if(LIVENESS==='blink')  return await liveCapture(videoId, promptId);
+  if(LIVENESS==='motion') return await motionCapture(videoId, promptId);
+  return await captureFace(videoId, promptId);   // 'off' — face recognition only
+}
+
+// Motion liveness: prove you're live by turning your head. Large, reliable signal — works where blink doesn't.
+async function motionCapture(videoId, promptId){
+  await ensureModels();
+  const v=document.getElementById(videoId); await waitForVideo(v);
+  if(!v.videoWidth) throw new Error('Camera not ready — wait a second and retry.');
+  const opts=detOpts();
+  prompt(promptId,'Slowly turn your head left, then right');
+  let min=1, max=0, sawFace=false, start=Date.now();
+  while(Date.now()-start<LIVE_TIMEOUT){
+    const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks();
+    if(r){ sawFace=true;
+      const nose=r.landmarks.positions[30], box=r.detection.box;   // nose tip vs face box
+      const nx=(nose.x-box.x)/box.width;
+      if(nx<min) min=nx; if(nx>max) max=nx;
+      if(max-min>=MOTION_RANGE) break;
+    }
+    await wait(0);
+  }
+  if(!sawFace) throw new Error('No face detected — face the camera in good light.');
+  if(max-min<MOTION_RANGE) throw new Error('Turn your head a bit more from side to side, then retry.');
   return await grabDescriptor(v, opts, promptId);
 }
 
@@ -264,7 +296,7 @@ function prompt(id,txt){ const el=document.getElementById(id); if(!el)return; el
 async function doCheckin(){
   const btn=document.getElementById('btnA'); btn.disabled=true; ring('ringA','scan'); tickClock();
   try{
-    const cap=await liveCapture('camA','promptA'); setStatus('statA','Verifying…');
+    const cap=await verifyLive('camA','promptA'); setStatus('statA','Verifying…');
     const r=await api('markAttendance',{descriptor:cap.descriptor});
     if(r.ok){ ring('ringA','ok'); setStatus('statA',`${r.slotLabel} recorded — ${r.name} at ${r.time.split(' ')[1]}.`,'go'); }
     else { ring('ringA','no'); setStatus('statA', reasonText(r), 'warn'); }
