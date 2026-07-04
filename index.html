@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Attendance · Check-in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+<style>
+  :root{--ink:#141b2e;--ink-soft:#233049;--paper:#f6f4ef;--surface:#fff;--line:#e2ddd2;--muted:#6b7280;--text:#1c2230;
+    --go:#1f9d76;--go-soft:#e7f5ef;--warn:#c67a1e;--warn-soft:#fbf1e2;--stop:#c0492f;--accent:#3b6ea5;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--text);background:var(--paper);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 18px 60px}
+  header.bar{display:flex;align-items:center;justify-content:space-between;padding:6px 2px 22px}
+  .brand{font-family:'Space Grotesk';font-weight:700;font-size:20px;letter-spacing:-.02em;color:var(--ink)}
+  .brand span{color:var(--accent)}
+  .home-link{background:none;border:none;color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
+  .home-link:hover{color:var(--ink)}
+  h1{font-family:'Space Grotesk';font-weight:600;font-size:26px;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 22px}
+  .cards{display:grid;gap:14px;grid-template-columns:1fr 1fr}
+  @media(max-width:560px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;cursor:pointer;transition:transform .12s,border-color .12s}
+  .card:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .card h3{font-family:'Space Grotesk';font-size:18px;margin:0 0 6px}
+  .card p{color:var(--muted);font-size:13.5px;margin:0}
+  .card .ic{font-size:26px;margin-bottom:12px}
+  .card.mini{padding:16px 18px;display:flex;align-items:center;gap:12px}
+  .card.mini .ic{font-size:20px;margin:0}.card.mini div h3{font-size:15px;margin:0}.card.mini div p{font-size:12.5px}
+  .stage{position:relative;background:var(--ink);border-radius:20px;overflow:hidden;aspect-ratio:4/3}
+  .stage video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  .ring{position:absolute;inset:0;border:3px solid rgba(255,255,255,.28);border-radius:20px;margin:14px;transition:border-color .3s;pointer-events:none}
+  .ring.scan{border-color:var(--accent);animation:pulse 1.2s ease-in-out infinite}.ring.ok{border-color:var(--go)}.ring.no{border-color:var(--warn)}
+  @keyframes pulse{50%{border-color:rgba(59,110,165,.35)}}
+  .prompt{position:absolute;top:0;left:0;right:0;text-align:center;padding:12px;font-weight:600;font-size:14px;color:#fff;background:linear-gradient(rgba(0,0,0,.45),transparent)}
+  .clock{position:absolute;left:16px;bottom:14px;font-family:'JetBrains Mono';font-size:11.5px;color:rgba(255,255,255,.72);background:rgba(0,0,0,.35);padding:4px 8px;border-radius:7px}
+  .status{margin-top:16px;padding:14px 16px;border-radius:12px;font-size:15px;min-height:52px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line)}
+  .status.go{background:var(--go-soft);border-color:#bfe6d6;color:#0f5c44}.status.warn{background:var(--warn-soft);border-color:#eed7ad;color:#8a5411}
+  .status .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+  button.act{width:100%;margin-top:16px;padding:15px;border:none;border-radius:13px;background:var(--ink);color:#fff;font-family:'Space Grotesk';font-weight:600;font-size:16px;cursor:pointer}
+  button.act:hover{background:var(--ink-soft)}button.act:disabled{opacity:.5;cursor:default}
+  .ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}.ghost:hover{background:#faf8f3}
+  label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin:14px 0 5px}
+  input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:15px;background:#fff}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+  .row{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-top:16px}
+  .panel h3{font-family:'Space Grotesk';margin:0 0 4px;font-size:17px}.panel .hint{color:var(--muted);font-size:13px;margin:0 0 6px}
+  .tabs{display:flex;gap:6px;margin:6px 0 4px;flex-wrap:wrap}
+  .tabs button{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 14px;font:inherit;font-size:13.5px;cursor:pointer;color:var(--muted)}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em}
+  .pill{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--go-soft);color:#0f5c44}
+  .pill.mid{background:#eef2f8;color:#33507a}
+  .hide{display:none}.mini-note{font-size:12.5px;color:var(--muted);margin-top:8px}.mono{font-family:'JetBrains Mono';font-size:11.5px}
+  .diag{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line);font-size:14px}
+  .diag .lamp{width:12px;height:12px;border-radius:50%;background:#cbd0d8;flex:none}
+  .diag.pass .lamp{background:var(--go)}.diag.fail .lamp{background:var(--stop)}.diag.run .lamp{background:var(--warn)}
+  .diag .msg{margin-left:auto;color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar"><div class="brand">Attend<span>·</span>ance</div><button class="home-link" onclick="go('home')">← Home</button></header>
+
+  <section id="home">
+    <h1>Who's here?</h1>
+    <p class="sub">Live, blink-verified. Four punches a day (incl. lunch), logged to your sheet.</p>
+    <div class="cards">
+      <div class="card" onclick="go('checkin')"><div class="ic">📷</div><h3>Punch in / out</h3><p>Look at the camera and blink to log your time.</p></div>
+      <div class="card" onclick="go('login')"><div class="ic">🔑</div><h3>Staff sign in</h3><p>Managers, admins and super admins.</p></div>
+    </div>
+    <div class="card mini" style="margin-top:14px" onclick="go('diag')"><div class="ic">🩺</div><div><h3>System check</h3><p>Verify API, camera and models before rollout.</p></div></div>
+  </section>
+
+  <section id="checkin" class="hide">
+    <h1>Punch in / out</h1>
+    <p class="sub">Morning in · lunch out · lunch in · evening out — chosen automatically by time of day.</p>
+    <div class="stage">
+      <video id="camA" autoplay muted playsinline></video>
+      <div class="prompt hide" id="promptA"></div><div class="ring" id="ringA"></div><div class="clock" id="clockA"></div>
+    </div>
+    <div class="status" id="statA"><span class="dot"></span><span>Ready when you are.</span></div>
+    <button class="act" id="btnA" onclick="doCheckin()">Start</button>
+  </section>
+
+  <section id="diag" class="hide">
+    <h1>System check</h1>
+    <p class="sub">Confirms the moving parts work on this device before rollout.</p>
+    <div class="panel">
+      <div class="diag" id="dgApi"><span class="lamp"></span><span>Backend API reachable</span><span class="msg">—</span></div>
+      <div class="diag" id="dgModel"><span class="lamp"></span><span>Face models load</span><span class="msg">—</span></div>
+      <div class="diag" id="dgCam" style="border-bottom:none"><span class="lamp"></span><span>Camera permission</span><span class="msg">—</span></div>
+      <button class="act" onclick="runDiag()">Run checks</button>
+    </div>
+  </section>
+
+  <section id="login" class="hide">
+    <h1>Staff sign in</h1><p class="sub">Use the email and PIN set for you in the Staff tab.</p>
+    <div class="panel" style="max-width:420px">
+      <label>Email</label><input id="lgEmail" type="email" autocomplete="username">
+      <label>PIN</label><input id="lgPin" type="password" autocomplete="current-password">
+      <button class="act" onclick="doLogin()">Sign in</button>
+      <div class="status hide" id="lgStat" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+  <section id="console" class="hide">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div><h1 id="cTitle">Console</h1><p class="sub" id="cWho"></p></div>
+      <button class="home-link" onclick="logout()">Sign out</button>
+    </div>
+    <div class="tabs" id="cTabs"></div>
+
+    <div class="panel tabpane" data-pane="staff">
+      <h3>Staff &amp; roles</h3><p class="hint">PINs are stored hashed — you won't see them again after saving.</p>
+      <div class="row"><div><label>Name</label><input id="stName"></div><div><label>Email</label><input id="stEmail" type="email"></div></div>
+      <div class="row"><div><label>Role</label><select id="stRole"><option value="ADMIN">Admin</option><option value="MANAGER">Manager</option><option value="SUPER_ADMIN">Super Admin</option></select></div><div><label>PIN</label><input id="stPin"></div></div>
+      <button class="act" onclick="addStaff()">Add staff</button><div id="stList"></div>
+    </div>
+
+    <div class="panel tabpane hide" data-pane="departments">
+      <h3>Departments</h3><p class="hint">The manager email here receives that department's weekly report.</p>
+      <div class="row"><div><label>Department name</label><input id="dpName" placeholder="Firmware"></div><div><label>Manager email</label><input id="dpMgr" type="email"></div></div>
+      <button class="act" onclick="addDept()">Create department</button>
+    </div>
+
+    <div class="panel tabpane hide" data-pane="register">
+      <h3>Register employee</h3><p class="hint">Live capture with a blink check — no photo can be enrolled.</p>
+      <div class="row"><div><label>Full name</label><input id="rgName"></div><div><label>Department</label><select id="rgDept"></select></div></div>
+      <div class="stage" style="margin-top:14px"><video id="camB" autoplay muted playsinline></video><div class="prompt hide" id="promptB"></div><div class="ring" id="ringB"></div></div>
+      <button class="act" onclick="doRegister()">Capture &amp; register</button>
+      <div class="status hide" id="rgStat" style="margin-top:14px"></div><div id="empList"></div>
+    </div>
+
+    <div class="panel tabpane hide" data-pane="attendance">
+      <h3>Attendance log</h3>
+      <div class="row" style="align-items:end;grid-template-columns:1fr auto auto">
+        <div><label>Date</label><input id="atDate" type="date"></div>
+        <button class="act" style="margin-top:0" onclick="loadAttendance()">Load</button>
+        <button class="act ghost" style="margin-top:0" onclick="exportCsv()">Export CSV</button>
+      </div>
+      <div id="atSummary" class="mini-note"></div><div id="atList"></div>
+      <button class="act ghost hide" id="btnWeekly" style="margin-top:16px" onclick="sendWeekly()">✉️ Send weekly report now (test)</button>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ============================ CONFIG ============================ */
+const API_URL = 'https://script.google.com/macros/s/AKfycbx4GrGKC9nkDfsBzzhYkENJiCzlor1LALRYQR1AJ9d-DIuDADo1KsfTEqPmz0SCtE0/exec';
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+const EAR_OPEN = 0.24, EAR_SHUT = 0.18, LIVE_TIMEOUT = 9000;
+
+/* ============================ STATE ============================ */
+let session=null, stream=null, modelsReady=false, boot={departments:[]}, lastAtt=[];
+
+/* ============================ API ============================ */
+async function api(action,data){
+  const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),25000); let res;
+  try{ res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(Object.assign({action},data||{})),signal:ctrl.signal}); }
+  catch(e){ throw new Error('Cannot reach the backend. Check API_URL and deployment access.'); }
+  finally{ clearTimeout(t); }
+  let out; try{ out=await res.json(); }catch(e){ throw new Error('Backend returned a non-JSON response (often a CORS/permissions issue).'); }
+  if(out.error && /session/i.test(out.error)) session=null;
+  if(out.ok===false && out.error) throw new Error(out.error);
+  return out;
+}
+
+/* ============================ NAV ============================ */
+function go(view){
+  ['home','checkin','login','console','diag'].forEach(v=>document.getElementById(v).classList.toggle('hide',v!==view));
+  if(view==='checkin'){ startCam('camA'); tickClock(); setStatus('statA','Ready when you are.'); ring('ringA',''); prompt('promptA',''); document.getElementById('btnA').disabled=false; }
+}
+function tickClock(){ const el=document.getElementById('clockA'); if(!el)return;
+  const d=new Date(); el.textContent=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+' · '+slotHint(d.getHours()); }
+function slotHint(h){ return h<12?'morning check-in':(h<16?'afternoon check-out / in':'evening check-out'); }
+
+/* ============================ MODELS + CAMERA ============================ */
+async function ensureModels(){ if(modelsReady) return;
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL); modelsReady=true; }
+async function ensureStream(){ if(stream) return stream;
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false}); return stream; }
+async function startCam(id){ try{ const v=document.getElementById(id); v.srcObject=await ensureStream(); ensureModels(); }
+  catch(e){ setStatus('statA','Camera blocked — allow access and reload.','warn'); } }
+
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+function ear(eye){ const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y); return (d(eye[1],eye[5])+d(eye[2],eye[4]))/(2*d(eye[0],eye[3])); }
+async function liveCapture(videoId, promptId){
+  await ensureModels();
+  const v=document.getElementById(videoId), opts=new faceapi.TinyFaceDetectorOptions();
+  const start=Date.now(); let phase='open', blinked=false, sawFace=false;
+  prompt(promptId,'Blink once 👁️');
+  while(Date.now()-start<LIVE_TIMEOUT){
+    const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks();
+    if(r){ sawFace=true; const e=(ear(r.landmarks.getLeftEye())+ear(r.landmarks.getRightEye()))/2;
+      if(phase==='open'&&e<EAR_SHUT) phase='closed'; else if(phase==='closed'&&e>EAR_OPEN){ blinked=true; break; } }
+    await wait(110);
+  }
+  if(!blinked){ prompt(promptId,''); throw new Error(sawFace?'No blink detected — please blink and retry.':'No face detected — move into frame.'); }
+  prompt(promptId,'Hold still…');
+  for(let i=0;i<8;i++){
+    const r=await faceapi.detectSingleFace(v,opts).withFaceLandmarks().withFaceDescriptor();
+    if(r){ const e=(ear(r.landmarks.getLeftEye())+ear(r.landmarks.getRightEye()))/2;
+      if(e>0.20){ const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+        c.getContext('2d').drawImage(v,0,0); prompt(promptId,'');
+        return {descriptor:Array.from(r.descriptor), photo:c.toDataURL('image/jpeg',0.7)}; } }
+    await wait(90);
+  }
+  prompt(promptId,''); throw new Error('Could not capture a clear frame — try again.');
+}
+
+/* ============================ UI helpers ============================ */
+function setStatus(id,msg,kind){ const s=document.getElementById(id); s.className='status'+(kind?(' '+kind):''); s.classList.remove('hide'); s.innerHTML='<span class="dot"></span><span>'+msg+'</span>'; }
+function ring(id,c){ document.getElementById(id).className='ring'+(c?(' '+c):''); }
+function prompt(id,txt){ const el=document.getElementById(id); if(!el)return; el.textContent=txt; el.classList.toggle('hide',!txt); }
+
+/* ============================ CHECK-IN ============================ */
+async function doCheckin(){
+  const btn=document.getElementById('btnA'); btn.disabled=true; ring('ringA','scan'); tickClock();
+  try{
+    const cap=await liveCapture('camA','promptA'); setStatus('statA','Verifying…');
+    const r=await api('markAttendance',{descriptor:cap.descriptor});
+    if(r.ok){ ring('ringA','ok'); setStatus('statA',`${r.slotLabel} recorded — ${r.name} at ${r.time.split(' ')[1]}.`,'go'); }
+    else { ring('ringA','no'); setStatus('statA', reasonText(r), 'warn'); }
+  }catch(e){ ring('ringA','no'); setStatus('statA', e.message, 'warn'); }
+  btn.disabled=false;
+}
+function reasonText(r){
+  switch(r.reason){
+    case 'not_recognized': return 'Face not recognized. Ask an admin to register you.';
+    case 'already_slot': return `${r.name}, your ${r.slotLabel.toLowerCase()} is already logged (${r.time}).`;
+    default: return 'Could not log attendance.';
+  }
+}
+
+/* ============================ DIAGNOSTICS ============================ */
+function dg(id,state,msg){ const el=document.getElementById(id); el.className='diag '+state; el.querySelector('.msg').textContent=msg; }
+async function runDiag(){
+  ['dgApi','dgModel','dgCam'].forEach(id=>dg(id,'run','testing…'));
+  try{ const r=await api('ping'); dg('dgApi','pass', r.pong?('v'+(r.version||'?')):'reached'); }catch(e){ dg('dgApi','fail', e.message.slice(0,40)); }
+  try{ await ensureModels(); dg('dgModel','pass','loaded'); }catch(e){ dg('dgModel','fail','CDN blocked'); }
+  try{ await ensureStream(); dg('dgCam','pass','allowed'); }catch(e){ dg('dgCam','fail','denied/blocked'); }
+}
+
+/* ============================ LOGIN / CONSOLE ============================ */
+async function doLogin(){
+  const email=document.getElementById('lgEmail').value.trim(), pin=document.getElementById('lgPin').value.trim();
+  const st=document.getElementById('lgStat');
+  try{ const r=await api('login',{email,pin}); session={token:r.token,role:r.role,name:r.name,email};
+    boot=await api('bootstrap'); openConsole();
+  }catch(e){ st.classList.remove('hide'); st.className='status warn'; st.innerHTML='<span class="dot"></span><span>'+e.message+'</span>'; }
+}
+function logout(){ session=null; document.getElementById('lgPin').value=''; go('home'); }
+
+const PANES={ SUPER_ADMIN:['staff','departments','register','attendance'], ADMIN:['departments','register','attendance'], MANAGER:['attendance'] };
+const LABEL={staff:'Staff',departments:'Departments',register:'Register',attendance:'Attendance'};
+function openConsole(){
+  go('console');
+  document.getElementById('cTitle').textContent=({SUPER_ADMIN:'Super Admin',ADMIN:'Admin',MANAGER:'Manager'})[session.role]+' console';
+  document.getElementById('cWho').textContent=session.name+' · '+session.email;
+  const tabs=document.getElementById('cTabs'); tabs.innerHTML=''; const panes=PANES[session.role];
+  panes.forEach((p,i)=>{ const b=document.createElement('button'); b.textContent=LABEL[p]; b.onclick=()=>showPane(p,b); if(i===0)b.classList.add('on'); tabs.appendChild(b); });
+  document.querySelectorAll('.tabpane').forEach(el=>el.classList.add('hide'));
+  showPane(panes[0], tabs.firstChild); fillSelects();
+}
+function showPane(name,btn){
+  document.querySelectorAll('.tabpane').forEach(el=>el.classList.toggle('hide', el.dataset.pane!==name));
+  document.querySelectorAll('#cTabs button').forEach(b=>b.classList.remove('on')); if(btn) btn.classList.add('on');
+  if(name==='register'){ startCam('camB'); renderEmployees(); }
+  if(name==='staff') renderStaff();
+  if(name==='attendance'){ document.getElementById('atDate').value=todayStr();
+    document.getElementById('btnWeekly').classList.toggle('hide', session.role==='MANAGER'); loadAttendance(); }
+}
+function todayStr(){ return new Date().toLocaleDateString('en-CA'); }
+function deptName(id){ const d=boot.departments.find(x=>x.deptId===id); return d?d.name:id; }
+function fillSelects(){ const rg=document.getElementById('rgDept');
+  if(rg) rg.innerHTML=boot.departments.map(d=>`<option value="${d.deptId}">${d.name}</option>`).join('')||'<option value="">— no departments yet —</option>'; }
+
+async function addStaff(){
+  try{ await api('addStaff',{token:session.token,name:document.getElementById('stName').value.trim(),newEmail:document.getElementById('stEmail').value.trim(),role:document.getElementById('stRole').value,newPin:document.getElementById('stPin').value.trim()});
+    document.getElementById('stName').value=document.getElementById('stEmail').value=document.getElementById('stPin').value=''; renderStaff();
+  }catch(e){ alert(e.message); }
+}
+async function renderStaff(){ const r=await api('listStaff',{token:session.token});
+  document.getElementById('stList').innerHTML='<table><tr><th>Name</th><th>Email</th><th>Role</th></tr>'+r.staff.map(s=>`<tr><td>${s.name}</td><td>${s.email}</td><td>${s.role}</td></tr>`).join('')+'</table>'; }
+async function addDept(){
+  try{ await api('addDepartment',{token:session.token,name:document.getElementById('dpName').value.trim(),managerEmail:document.getElementById('dpMgr').value.trim()});
+    boot=await api('bootstrap'); fillSelects(); document.getElementById('dpName').value=document.getElementById('dpMgr').value=''; alert('Department created.');
+  }catch(e){ alert(e.message); }
+}
+async function doRegister(){
+  const st=document.getElementById('rgStat'); st.classList.remove('hide'); st.className='status'; st.innerHTML='<span class="dot"></span><span>Follow the prompt…</span>'; ring('ringB','scan');
+  try{
+    const name=document.getElementById('rgName').value.trim(), deptId=document.getElementById('rgDept').value;
+    if(!name) throw new Error('Enter a name'); if(!deptId) throw new Error('Create a department first');
+    const cap=await liveCapture('camB','promptB');
+    const r=await api('registerEmployee',{token:session.token, name, deptId, descriptor:cap.descriptor, photo:cap.photo});
+    ring('ringB','ok'); st.className='status go'; st.innerHTML='<span class="dot"></span><span>Registered '+r.name+'.</span>';
+    document.getElementById('rgName').value=''; renderEmployees();
+  }catch(e){ ring('ringB','no'); st.className='status warn'; st.innerHTML='<span class="dot"></span><span>'+e.message+'</span>'; }
+}
+async function renderEmployees(){ const r=await api('listEmployees',{token:session.token});
+  document.getElementById('empList').innerHTML='<table><tr><th>Name</th><th>Department</th><th>Registered</th></tr>'+r.employees.map(e=>`<tr><td>${e.name}</td><td>${deptName(e.deptId)}</td><td class="mono">${e.registeredOn||''}</td></tr>`).join('')+'</table>'; }
+
+async function loadAttendance(){
+  const r=await api('attendanceFor',{token:session.token, date:document.getElementById('atDate').value}); lastAtt=r.rows;
+  const present=r.rows.length, done=r.rows.filter(a=>a.eveningOut).length;
+  document.getElementById('atSummary').textContent=`${present} present · ${done} checked out`;
+  const el=document.getElementById('atList');
+  if(!r.rows.length){ el.innerHTML='<p class="mini-note">No records for this date.</p>'; return; }
+  el.innerHTML='<table><tr><th>Name</th><th>Dept</th><th>Morn</th><th>Lunch&nbsp;out</th><th>Lunch&nbsp;in</th><th>Eve</th><th></th></tr>'+
+    r.rows.map(a=>`<tr><td>${a.name}</td><td>${deptName(a.deptId)}</td>
+      <td class="mono">${tt(a.morningIn)}</td><td class="mono">${tt(a.afternoonOut)}</td><td class="mono">${tt(a.afternoonIn)}</td><td class="mono">${tt(a.eveningOut)}</td>
+      <td><span class="pill ${a.eveningOut?'':'mid'}">${a.status||''}</span></td></tr>`).join('')+'</table>';
+}
+function tt(s){ return s ? (String(s).split(' ')[1]||s) : '—'; }
+function csv(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function exportCsv(){
+  if(!lastAtt.length){ alert('Load a date first.'); return; }
+  const head=['date','name','department','morningIn','afternoonOut','afternoonIn','eveningOut','status'];
+  const lines=[head.join(',')].concat(lastAtt.map(a=>[a.date,a.name,deptName(a.deptId),a.morningIn,a.afternoonOut,a.afternoonIn,a.eveningOut,a.status].map(csv).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'}); const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download='attendance_'+document.getElementById('atDate').value+'.csv'; link.click(); URL.revokeObjectURL(url);
+}
+async function sendWeekly(){
+  if(!confirm('Send the weekly report email now to managers and admins?')) return;
+  try{ const r=await api('sendWeeklyNow',{token:session.token});
+    alert(`Sent ${r.emailsSent} email(s) for ${r.departments} department(s).\nWeek: ${r.label}`);
+  }catch(e){ alert(e.message); }
+}
+
+/* boot */
+go('home');
+</script>
+</body>
+</html>
