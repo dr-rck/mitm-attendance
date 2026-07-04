@@ -157,7 +157,7 @@ const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
 const LIVENESS = 'off';       // check-in liveness: 'off' (face only) | 'motion' (head turn) | 'blink'
 const MOTION_RANGE = 0.16;    // how far the head must turn for 'motion' mode (fraction of face width)
 const LIVE_TIMEOUT = 12000;   // ms to wait for the liveness action
-const BLINK_DROP = 0.85;      // 'blink' mode: eyes "shut" below this fraction of your open baseline
+const BLINK_DROP = 0.72;      // 'blink' mode: eyes "shut" below this fraction of your open baseline
 const DET_OPTS = { inputSize: 320, scoreThreshold: 0.4 };  // detector tuning (inputSize multiple of 32)
 
 /* ============================ STATE ============================ */
